@@ -30,6 +30,25 @@ jobs:
         id: issue-parser
         with:
           template-path: .github/ISSUE_TEMPLATE/issue-form.yml
+          
+      - name: Map Assignee
+        id: map-assignee
+        run: |
+          ASSIGNEE="${{ steps.issue-parser.outputs.issueparser_assignee }}"
+          
+          case "$ASSIGNEE" in
+            "YB")
+              ACCOUNT_ID="712020:3adc9a27-acea-40e9-b035-2daa43129040"
+              ;;
+            "Seyeon Kim")
+              ACCOUNT_ID="712020:3b45f2cf-64f0-405b-9c41-e0d6fbec4c90"
+              ;;
+            *)
+              # 선택 안 한 경우 비워둠
+              ACCOUNT_ID=""
+              ;;
+          esac
+          
 
       - name: Log Issue Parser
         run: |
