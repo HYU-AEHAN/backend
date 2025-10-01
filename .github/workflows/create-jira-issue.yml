@@ -50,6 +50,18 @@ jobs:
           
           echo "assignee_id=$ACCOUNT_ID" >> $GITHUB_OUTPUT
 
+      - name: Convert markdown to Jira Syntax
+        uses: peter-evans/jira2md@v1
+        id: md2jira
+        with:
+          input-text: |
+            h3. Github Issue Link
+            * ${{ github.event.issue.html_url }}
+
+            h3. Description
+            ${{ github.event.issue.body }}
+          mode: md2jira
+
       - name: Prepare Jira Fields
         id: jira-fields
         run: |
@@ -86,10 +98,7 @@ jobs:
           project: LUV
           issuetype: 하위 작업
           summary: '[BE] ${{ github.event.issue.title }}'
-          description: |
-            Github Issue Link: ${{ github.event.issue.html_url }}
-            
-            ${{ github.event.issue.body }}
+          description: '${{ steps.md2jira.outputs.output-text }}'
           fields: ${{ steps.jira-fields.outputs.fields }}
 
       - name: Checkout develop code
