@@ -37,18 +37,6 @@ body:
         - Seyeon Kim
     validations:
       required: false
-  
-  - type: dropdown
-    id: assignee
-    attributes:
-      label: '👤 담당자 (Assignee)'
-      description: '담당자를 선택해주세요'
-      options:
-        - YB
-        - Seyeon Kim
-      default: 0
-    validations:
-      required: true
       
   - type: input
     id: description
