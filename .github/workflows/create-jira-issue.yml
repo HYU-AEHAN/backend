@@ -44,60 +44,70 @@ jobs:
               ACCOUNT_ID="712020:3b45f2cf-64f0-405b-9c41-e0d6fbec4c90"
               ;;
             *)
-              # 선택 안 한 경우 비워둠
               ACCOUNT_ID=""
               ;;
           esac
           
+          echo "assignee_id=$ACCOUNT_ID" >> $GITHUB_OUTPUT
 
-      - name: Log Issue Parser
+      - name: Prepare Jira Fields
+        id: jira-fields
         run: |
-          echo '${{ steps.issue-parser.outputs.issueparser_parentKey }}'
-          echo '${{ steps.issue-parser.outputs.__ticket_number }}'
-          echo '${{ steps.issue-parser.outputs.jsonString }}'
+          ASSIGNEE_ID="${{ steps.map-assignee.outputs.assignee_id }}"
+          PARENT_KEY="${{ steps.issue-parser.outputs.issueparser_parentKey }}"
+          
+          if [ -n "$ASSIGNEE_ID" ]; then
+            # assignee 있음
+            FIELDS=$(cat <<EOF
+          {
+            "parent": {"key": "$PARENT_KEY"},
+            "assignee": {"accountId": "$ASSIGNEE_ID"}
+          }
+          EOF
+            )
+          else
+            # assignee 없음
+            FIELDS=$(cat <<EOF
+          {
+            "parent": {"key": "$PARENT_KEY"}
+          }
+          EOF
+            )
+          fi
+          
+          echo "fields<<EOF" >> $GITHUB_OUTPUT
+          echo "$FIELDS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: Convert markdown to Jira Syntax
-        uses: peter-evans/jira2md@v1
-        id: md2jira
-        with:
-          input-text: |
-            ### Github Issue Link
-            - ${{ github.event.issue.html_url }}
-
-            ${{ github.event.issue.body }}
-          mode: md2jira
-
-      - name: Create Issue
+      - name: Create Subtask
         id: create
         uses: atlassian/gajira-create@v3
         with:
           project: LUV
           issuetype: 하위 작업
           summary: '[BE] ${{ github.event.issue.title }}'
-          description: '${{ steps.md2jira.outputs.output-text }}'
-          fields: |
-            {
-              "parent": {
-                "key": "${{ steps.issue-parser.outputs.issueparser_parentKey }}"
-              },
-              "assignee": {
-                "accountId": "${{ steps.map-assignee.outputs.assignee_id }}"
-              }
-            }
-
-      - name: Log created issue
-        run: echo "Jira Issue ${{ steps.issue-parser.outputs.issueparser_parentKey }}/${{ steps.create.outputs.issue }} was created"
+          description: |
+            Github Issue Link: ${{ github.event.issue.html_url }}
+            
+            ${{ github.event.issue.body }}
+          fields: ${{ steps.jira-fields.outputs.fields }}
 
       - name: Checkout develop code
         uses: actions/checkout@v4
         with:
           ref: develop
 
-      - name: Create branch with Ticket number and type
+      - name: Setup Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Create branch
         run: |
           ISSUE_NUMBER="${{ steps.create.outputs.issue }}"
           BRANCH_TYPE="${{ steps.issue-parser.outputs.issueparser_branchType }}"
-          if [ -z "$BRANCH_TYPE" ]; then
+          
+          if [ -z "$BRANCH_TYPE" ] || [ "$BRANCH_TYPE" = "_No response_" ]; then
             BRANCH_TYPE="feature"
           fi
           
@@ -130,12 +140,33 @@ jobs:
           esac
           
           echo "github_user=$GITHUB_USER" >> $GITHUB_OUTPUT
-          echo "✅ GitHub Assignee: $GITHUB_USER"
 
-      - name: Add comment with Jira issue link
+      - name: Assign GitHub Issue
+        if: steps.map-github.outputs.github_user != ''
+        uses: actions-cool/issues-helper@v3
+        with:
+          actions: 'add-assignees'
+          token: ${{ secrets.GITHUB_TOKEN }}
+          issue-number: ${{ github.event.issue.number }}
+          assignees: ${{ steps.map-github.outputs.github_user }}
+
+      - name: Add comment
         uses: actions-cool/issues-helper@v3
         with:
           actions: 'create-comment'
           token: ${{ secrets.GITHUB_TOKEN }}
           issue-number: ${{ github.event.issue.number }}
-          body: 'Jira Issue Created: [${{ steps.create.outputs.issue }}](${{ secrets.JIRA_BASE_URL }}/browse/${{ steps.create.outputs.issue }})'
+          body: |
+            ## ✅ Jira 연동 완료
+            
+            **Jira Subtask**: [${{ steps.create.outputs.issue }}](${{ secrets.JIRA_BASE_URL }}/browse/${{ steps.create.outputs.issue }})
+            **상위 Story**: [${{ steps.issue-parser.outputs.issueparser_parentKey }}](${{ secrets.JIRA_BASE_URL }}/browse/${{ steps.issue-parser.outputs.issueparser_parentKey }})
+            **담당자**: ${{ steps.issue-parser.outputs.issueparser_assignee }}
+            **브랜치**: `${{ steps.issue-parser.outputs.issueparser_branchType }}/${{ steps.create.outputs.issue }}`
+            
+            ---
+            ### 🚀 작업 시작하기
+            ```bash
+            git fetch origin
+            git checkout ${{ steps.issue-parser.outputs.issueparser_branchType }}/${{ steps.create.outputs.issue }}
+            ```
