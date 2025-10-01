@@ -79,6 +79,9 @@ jobs:
             {
               "parent": {
                 "key": "${{ steps.issue-parser.outputs.issueparser_parentKey }}"
+              },
+              "assignee": {
+                "accountId": "${{ steps.map-assignee.outputs.assignee_id }}"
               }
             }
 
@@ -108,6 +111,26 @@ jobs:
           actions: 'update-issue'
           token: ${{ secrets.GITHUB_TOKEN }}
           title: '[${{ steps.create.outputs.issue }}] ${{ github.event.issue.title }}'
+
+      - name: Map GitHub Username
+        id: map-github
+        run: |
+          ASSIGNEE="${{ steps.issue-parser.outputs.issueparser_assignee }}"
+
+          case "$ASSIGNEE" in
+            "YB")
+              GITHUB_USER="zxvm5962"
+              ;;
+            "Seyeon Kim")
+              GITHUB_USER="yonseeee"
+              ;;
+            *)
+              GITHUB_USER=""
+              ;;
+          esac
+          
+          echo "github_user=$GITHUB_USER" >> $GITHUB_OUTPUT
+          echo "✅ GitHub Assignee: $GITHUB_USER"
 
       - name: Add comment with Jira issue link
         uses: actions-cool/issues-helper@v3
